@@ -72,7 +72,7 @@ export default function HomePage() {
       sessionStorage.setItem("planco_suggestions", JSON.stringify(data.suggestions));
       sessionStorage.setItem("planco_location", location.trim() || "どこでも");
 
-      router.push("/roulette");
+      router.push("/suggestions");
     } catch (err) {
       setIsLoading(false);
       setError(err instanceof Error ? err.message : "エラーが発生しました");
