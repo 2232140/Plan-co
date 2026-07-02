@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Wallet, Sparkles, Settings, MapPin, AlertCircle, PenLine, History, LocateFixed, Loader2 } from "lucide-react";
+import { Users, Wallet, Sparkles, Settings, MapPin, AlertCircle, PenLine, History, LocateFixed, Loader2, MessageCircle } from "lucide-react";
 import LoadingScreen from "@/components/loading-screen";
 import { Suggestion } from "@/types/planco";
 
@@ -302,13 +302,22 @@ export default function HomePage() {
               >
                 プランを決める！✨
               </button>
-              <button
-                onClick={() => router.push("/custom")}
-                className="w-full py-3 rounded-2xl font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition-all text-sm flex items-center justify-center gap-2 active:scale-95"
-              >
-                <Settings size={15} />
-                自分でルーレットを作る
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => router.push("/chat")}
+                  className="py-3 rounded-2xl font-bold text-emerald-500 bg-emerald-50 hover:bg-emerald-100 transition-all text-sm flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <MessageCircle size={15} />
+                  チャットで相談
+                </button>
+                <button
+                  onClick={() => router.push("/custom")}
+                  className="py-3 rounded-2xl font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 transition-all text-sm flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <Settings size={15} />
+                  自分で作る
+                </button>
+              </div>
             </div>
           </div>
 

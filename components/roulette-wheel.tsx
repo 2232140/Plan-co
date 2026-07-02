@@ -7,6 +7,7 @@ interface RouletteWheelProps {
   items: string[];
   spinTrigger: number;
   onComplete: (item: string) => void;
+  syncedTarget?: number; // room sync: use this rotation instead of random
 }
 
 const SECTOR_COLORS = [
@@ -18,9 +19,10 @@ const SECTOR_COLORS = [
   "#D4F1C0",
 ];
 
-export default function RouletteWheel({ items, spinTrigger, onComplete }: RouletteWheelProps) {
+export default function RouletteWheel({ items, spinTrigger, onComplete, syncedTarget }: RouletteWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseRotationRef = useRef(0);
+  const syncedTargetRef = useRef<number | undefined>(undefined);
   const [targetRotation, setTargetRotation] = useState(0);
   const N = items.length;
   const SECTOR_ANGLE = 360 / N;
@@ -100,13 +102,22 @@ export default function RouletteWheel({ items, spinTrigger, onComplete }: Roulet
     drawWheel();
   }, [drawWheel]);
 
+  // keep ref in sync so the spinTrigger effect reads the latest value
+  syncedTargetRef.current = syncedTarget;
+
   // trigger a new spin when spinTrigger increments
   useEffect(() => {
     if (spinTrigger === 0) return;
-    const extra = Math.random() * 360;
-    const newTarget = baseRotationRef.current + 360 * 7 + extra;
-    baseRotationRef.current = newTarget;
-    setTargetRotation(newTarget);
+    if (syncedTargetRef.current !== undefined) {
+      // room sync mode: animate to the shared target
+      setTargetRotation(syncedTargetRef.current);
+    } else {
+      // local mode: generate random rotation
+      const extra = Math.random() * 360;
+      const newTarget = baseRotationRef.current + 360 * 7 + extra;
+      baseRotationRef.current = newTarget;
+      setTargetRotation(newTarget);
+    }
   }, [spinTrigger]);
 
   const handleAnimationComplete = useCallback(() => {

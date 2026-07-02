@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Users } from "lucide-react";
 import RouletteWheel from "@/components/roulette-wheel";
 import ResultModal from "@/components/result-modal";
 import { Suggestion } from "@/types/planco";
@@ -210,6 +210,13 @@ export default function RoulettePage() {
                     詳細を見る・ここに決定！
                   </button>
                 )}
+                <button
+                  onClick={() => router.push("/room/new")}
+                  className="w-full py-3 rounded-2xl font-bold text-blue-400 bg-blue-50 hover:bg-blue-100 transition-all text-sm flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Users size={15} />
+                  友達と一緒に回す
+                </button>
               </div>
             </div>
           ) : (
