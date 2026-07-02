@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Wallet, Sparkles, Settings, MapPin, AlertCircle, PenLine, History } from "lucide-react";
+import { Users, Wallet, Sparkles, Settings, MapPin, AlertCircle, PenLine, History, LocateFixed, Loader2 } from "lucide-react";
 import LoadingScreen from "@/components/loading-screen";
 import { Suggestion } from "@/types/planco";
 
@@ -39,12 +39,35 @@ export default function HomePage() {
   const [themes, setThemes] = useState<string[]>([]);
   const [freeTheme, setFreeTheme] = useState("");
   const [location, setLocation] = useState("");
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const toggleTheme = (value: string) => {
     setThemes((prev) =>
       prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]
+    );
+  };
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      setError("お使いのブラウザは位置情報に対応していません");
+      return;
+    }
+    setGeoLoading(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setLocation("現在地");
+        setGeoLoading(false);
+      },
+      () => {
+        setError("位置情報の取得に失敗しました。手動でエリアを入力してください。");
+        setGeoLoading(false);
+      },
+      { timeout: 10000 }
     );
   };
 
@@ -59,11 +82,10 @@ export default function HomePage() {
         body: JSON.stringify({
           peopleCount: people,
           budget,
-          theme: [
-            ...themes,
-            freeTheme.trim(),
-          ].filter(Boolean).join("・") || "なんでも",
+          theme: [...themes, freeTheme.trim()].filter(Boolean).join("・") || "なんでも",
           location: location.trim() || "どこでも",
+          lat: coords?.lat,
+          lon: coords?.lon,
         }),
       });
 
@@ -83,9 +105,16 @@ export default function HomePage() {
     }
   };
 
+  const loadingMessage = coords
+    ? "現在地の天気を考慮して最適なプランを探索中"
+    : "Plan-coが楽しい予定を考え中";
+  const loadingSubMessage = coords
+    ? "🌤️ 天気・気温・風速を確認しています..."
+    : "🎢 少々お待ちください";
+
   return (
     <>
-      {isLoading && <LoadingScreen />}
+      {isLoading && <LoadingScreen message={loadingMessage} subMessage={loadingSubMessage} />}
 
       <main
         className="min-h-screen"
@@ -129,19 +158,40 @@ export default function HomePage() {
                   <span className="text-gray-400 font-medium ml-1">（任意）</span>
                 </span>
               </div>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="例：渋谷、新宿、梅田..."
-                className="w-full px-4 py-2.5 rounded-2xl border-2 border-rose-100 bg-rose-50 text-gray-700 font-bold placeholder:text-gray-300 placeholder:font-normal focus:outline-none focus:border-rose-300 text-sm transition-colors"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => {
+                    setLocation(e.target.value);
+                    if (e.target.value !== "現在地") setCoords(null);
+                  }}
+                  placeholder="例：渋谷、新宿、梅田..."
+                  className="flex-1 px-4 py-2.5 rounded-2xl border-2 border-rose-100 bg-rose-50 text-gray-700 font-bold placeholder:text-gray-300 placeholder:font-normal focus:outline-none focus:border-rose-300 text-sm transition-colors"
+                />
+                <button
+                  onClick={handleGetLocation}
+                  disabled={geoLoading}
+                  className={`px-3 py-2.5 rounded-2xl font-bold text-sm flex items-center gap-1.5 transition-all active:scale-95 shrink-0 ${
+                    coords
+                      ? "bg-rose-400 text-white shadow-sm"
+                      : "bg-rose-50 text-rose-400 hover:bg-rose-100"
+                  } disabled:opacity-60`}
+                >
+                  {geoLoading ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <LocateFixed size={15} />
+                  )}
+                  現在地
+                </button>
+              </div>
               {/* Quick chips */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {QUICK_AREAS.map((area) => (
                   <button
                     key={area}
-                    onClick={() => setLocation(area)}
+                    onClick={() => { setLocation(area); setCoords(null); }}
                     className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${
                       location === area
                         ? "bg-rose-400 text-white shadow-sm scale-105"
@@ -152,6 +202,12 @@ export default function HomePage() {
                   </button>
                 ))}
               </div>
+              {coords && (
+                <p className="text-xs text-rose-400 font-bold mt-1.5 flex items-center gap-1">
+                  <LocateFixed size={11} />
+                  現在地を取得しました。天気・気温も考慮したプランを提案します！
+                </p>
+              )}
             </section>
 
             {/* People */}

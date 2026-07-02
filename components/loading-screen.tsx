@@ -26,7 +26,12 @@ function SwingFigure() {
   );
 }
 
-export default function LoadingScreen() {
+interface LoadingScreenProps {
+  message?: string;
+  subMessage?: string;
+}
+
+export default function LoadingScreen({ message, subMessage }: LoadingScreenProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8"
@@ -41,14 +46,16 @@ export default function LoadingScreen() {
       {/* Message */}
       <div className="text-center space-y-2">
         <p className="text-white font-extrabold text-xl tracking-wide">
-          Plan-coが楽しい予定を考え中
+          {message ?? "Plan-coが楽しい予定を考え中"}
         </p>
         <div className="dot-pulse flex justify-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full bg-white" />
           <span className="inline-block w-2 h-2 rounded-full bg-white" />
           <span className="inline-block w-2 h-2 rounded-full bg-white" />
         </div>
-        <p className="text-white/70 text-sm mt-1">🎢 少々お待ちください</p>
+        <p className="text-white/70 text-sm mt-1">
+          {subMessage ?? "🎢 少々お待ちください"}
+        </p>
       </div>
     </div>
   );
