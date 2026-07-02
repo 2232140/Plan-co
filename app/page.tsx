@@ -175,8 +175,8 @@ export default function HomePage() {
                   disabled={geoLoading}
                   className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all duration-200 active:scale-95 disabled:opacity-60 ${
                     coords
-                      ? "bg-rose-400 text-white shadow-sm scale-105"
-                      : "bg-rose-50 text-rose-400 hover:bg-rose-100"
+                      ? "bg-emerald-400 text-white shadow-sm scale-105"
+                      : "bg-emerald-50 text-emerald-500 hover:bg-emerald-100"
                   }`}
                 >
                   {geoLoading ? (
