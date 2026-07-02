@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
 import RouletteWheel from "@/components/roulette-wheel";
 import ResultModal from "@/components/result-modal";
+import AmidaKuji from "@/components/amida-kuji";
 import { Suggestion } from "@/types/planco";
 import { saveHistory } from "@/lib/history";
 
@@ -58,6 +59,7 @@ export default function RoulettePage() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [activeTab, setActiveTab] = useState<"roulette" | "amida">("roulette");
   const [isCustom, setIsCustom] = useState(false);
+  const [amidaKey, setAmidaKey] = useState(0);
   const confettiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // sessionStorageからAIの提案データを読み込む
@@ -108,10 +110,25 @@ export default function RoulettePage() {
     });
   };
 
+  const handleAmidaComplete = useCallback(
+    (name: string) => {
+      const found = suggestions.find((s) => s.name === name) ?? null;
+      setSelectedSuggestion(found);
+      setShowConfetti(true);
+      if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current);
+      confettiTimerRef.current = setTimeout(() => setShowConfetti(false), 2200);
+    },
+    [suggestions]
+  );
+
   const handleReSpin = () => {
     setSelectedSuggestion(null);
     setShowConfetti(false);
-    handleSpin();
+    if (activeTab === "roulette") {
+      handleSpin();
+    } else {
+      setAmidaKey((k) => k + 1);
+    }
   };
 
   return (
@@ -220,12 +237,13 @@ export default function RoulettePage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white/85 backdrop-blur-sm rounded-3xl p-10 shadow-2xl flex flex-col items-center gap-3">
-              <span className="text-5xl">🪜</span>
-              <p className="font-extrabold text-gray-600 text-xl">あみだくじ</p>
-              <p className="text-gray-400 text-sm text-center leading-relaxed">
-                近日公開予定！<br />スプリント3でお楽しみに✨
-              </p>
+            <div className="relative bg-white/85 backdrop-blur-sm rounded-3xl px-4 py-5 shadow-2xl flex flex-col items-center overflow-hidden">
+              <ConfettiParticles show={showConfetti} />
+              <AmidaKuji
+                key={amidaKey}
+                items={wheelItems}
+                onComplete={handleAmidaComplete}
+              />
             </div>
           )}
         </div>
