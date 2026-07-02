@@ -19,10 +19,14 @@ const SYSTEM_INSTRUCTION = `
 - 3〜4ターンの会話でエリアとテーマが把握できた場合
 
 【提案フェーズ】
-提案フェーズに入ったら、以下のJSON形式のみを返してください（前後にテキストを絶対に付けないこと）：
+提案フェーズに入ったら、下記のJSON形式「だけ」を返してください。
+- マークダウンコードブロックは絶対に使わない
+- JSONの前後に一切テキストを付けない
+- 予算が低くても必ず5件提案する（低予算向けの工夫をする）
+
 {"mode":"suggest","suggestions":[{"id":"1","name":"10文字以内の名称","budget":"約○○円","description":"40文字以内の説明","reason":"30文字以内の理由"},{"id":"2","name":"...","budget":"...","description":"...","reason":"..."},{"id":"3","name":"...","budget":"...","description":"...","reason":"..."},{"id":"4","name":"...","budget":"...","description":"...","reason":"..."},{"id":"5","name":"...","budget":"...","description":"...","reason":"..."}]}
 
-必ず5件提案し、JSONのみ返してください。
+返すのはJSONのみ。それ以外の文字は一切含めないこと。
 `;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

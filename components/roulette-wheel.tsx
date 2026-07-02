@@ -66,8 +66,9 @@ export default function RouletteWheel({ items, spinTrigger, onComplete, syncedTa
       ctx.lineWidth = 3;
       ctx.stroke();
 
-      // label text
+      // label text — dynamic font size + 2-line fallback + truncation
       const textR = r * 0.62;
+      const maxW = 2 * textR * Math.sin(Math.PI / N) * 0.80;
       ctx.save();
       ctx.translate(
         cx + textR * Math.cos(midAngle),
@@ -75,10 +76,37 @@ export default function RouletteWheel({ items, spinTrigger, onComplete, syncedTa
       );
       ctx.rotate(midAngle + Math.PI / 2);
       ctx.fillStyle = "#555";
-      ctx.font = `bold ${Math.max(11, Math.floor(size / 20))}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(items[i], 0, 0);
+
+      let fontSize = Math.min(13, Math.max(9, Math.floor(size / 22)));
+      let label = items[i];
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      // Shrink font until it fits
+      while (fontSize > 9 && ctx.measureText(label).width > maxW) {
+        fontSize--;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+      }
+
+      if (ctx.measureText(label).width <= maxW) {
+        ctx.fillText(label, 0, 0);
+      } else {
+        // Try 2 lines split at midpoint
+        const mid = Math.ceil(label.length / 2);
+        const l1 = label.slice(0, mid);
+        const l2 = label.slice(mid);
+        if (Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) <= maxW) {
+          const lh = fontSize * 1.35;
+          ctx.fillText(l1, 0, -lh / 2);
+          ctx.fillText(l2, 0,  lh / 2);
+        } else {
+          // Truncate with ellipsis
+          while (label.length > 1 && ctx.measureText(label + "…").width > maxW) {
+            label = label.slice(0, -1);
+          }
+          ctx.fillText(label + "…", 0, 0);
+        }
+      }
       ctx.restore();
     }
 

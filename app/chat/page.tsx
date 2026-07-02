@@ -17,11 +17,24 @@ const INITIAL_MESSAGE: Message = {
   text: "こんにちは！ぷらんちゃんです🌸 今日はどこで遊ぶか一緒に考えましょう！\nどんなエリアで、誰と行く予定ですか？",
 };
 
+function extractJson(text: string): string | null {
+  const t = text.trim();
+  // Bare JSON
+  if (t.startsWith("{")) return t;
+  // Markdown code block (```json ... ``` or ``` ... ```)
+  const block = t.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (block) return block[1].trim();
+  // JSON embedded somewhere in text
+  const idx = t.indexOf("{");
+  if (idx !== -1) return t.slice(idx);
+  return null;
+}
+
 function parseSuggestions(text: string): Suggestion[] | null {
+  const jsonStr = extractJson(text);
+  if (!jsonStr) return null;
   try {
-    const trimmed = text.trim();
-    if (!trimmed.startsWith("{")) return null;
-    const data = JSON.parse(trimmed) as { mode: string; suggestions: Suggestion[] };
+    const data = JSON.parse(jsonStr) as { mode: string; suggestions: Suggestion[] };
     if (data.mode === "suggest" && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
       return data.suggestions.slice(0, 5).map((s, i) => ({
         ...s,
