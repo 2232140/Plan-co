@@ -103,18 +103,18 @@ export default function SuggestionsPage() {
                 className="w-full text-left bg-white/90 backdrop-blur-sm rounded-3xl p-5 shadow-lg active:scale-[0.98] transition-transform"
               >
                 {/* Card header */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                      className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-extrabold text-white shadow-sm"
+                      className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-extrabold text-white shadow-sm shrink-0"
                       style={{ backgroundColor: CARD_COLORS[i % CARD_COLORS.length] }}
                     >
                       {i + 1}
                     </div>
-                    <span className="font-extrabold text-gray-800 text-xl">{s.name}</span>
+                    <span className="font-extrabold text-gray-800 text-lg leading-tight break-words min-w-0">{s.name}</span>
                   </div>
                   <span
-                    className="text-xs font-bold px-3 py-1.5 rounded-full text-white"
+                    className="text-xs font-bold px-3 py-1.5 rounded-full text-white shrink-0 mt-0.5"
                     style={{ backgroundColor: CARD_COLORS[i % CARD_COLORS.length] }}
                   >
                     {s.budget}
