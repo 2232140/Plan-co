@@ -79,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     try {
       const chat = ai.chats.create({
         model: "gemini-2.5-flash",
-        config: { systemInstruction },
+        config: { systemInstruction, thinkingConfig: { thinkingBudget: 0 } },
         history: history ?? [],
       });
       const response = await chat.sendMessage({ message });

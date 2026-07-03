@@ -71,6 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const res = await ai.models.generateContent({
         model: "gemini-2.5-flash",
+        config: { thinkingConfig: { thinkingBudget: 0 } },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
       const raw = res.text ?? "";
