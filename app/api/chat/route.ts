@@ -78,7 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const chat = ai.chats.create({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         config: { systemInstruction },
         history: history ?? [],
       });
@@ -87,10 +87,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ text });
     } catch (err) {
       lastError = err;
+      if ((err as { status?: number }).status === 429) break;
       if (attempt === 0) await new Promise((r) => setTimeout(r, 800));
     }
   }
 
   console.error("Chat API error:", lastError);
-  return NextResponse.json({ error: "AI応答の生成に失敗しました" }, { status: 502 });
+  const is429 = (lastError as { status?: number })?.status === 429;
+  return NextResponse.json(
+    { error: is429 ? "AIの1日の利用上限に達しました。時間をおいてから再度お試しください🙏" : "AI応答の生成に失敗しました" },
+    { status: is429 ? 429 : 502 }
+  );
 }

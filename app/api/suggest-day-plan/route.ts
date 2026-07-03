@@ -70,7 +70,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
       const raw = res.text ?? "";
@@ -81,10 +81,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ plan: data });
     } catch (err) {
       lastError = err;
+      if ((err as { status?: number }).status === 429) break;
       if (attempt === 0) await new Promise((r) => setTimeout(r, 1000));
     }
   }
 
   console.error("Day plan error:", lastError);
-  return NextResponse.json({ error: "1日プランの生成に失敗しました" }, { status: 502 });
+  const is429 = (lastError as { status?: number })?.status === 429;
+  return NextResponse.json(
+    { error: is429 ? "AIの1日の利用上限に達しました。時間をおいてから再度お試しください🙏" : "1日プランの生成に失敗しました" },
+    { status: is429 ? 429 : 502 }
+  );
 }

@@ -134,7 +134,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: { responseMimeType: "application/json" },
     });
@@ -154,9 +154,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(data);
   } catch (err) {
     console.error("Gemini API error:", err);
+    const is429 = (err as { status?: number })?.status === 429;
     return NextResponse.json(
-      { error: "AI提案の生成に失敗しました。しばらく経ってから再試行してください。" },
-      { status: 502 }
+      { error: is429 ? "AIの1日の利用上限に達しました。時間をおいてから再度お試しください🙏" : "AI提案の生成に失敗しました。しばらく経ってから再試行してください。" },
+      { status: is429 ? 429 : 502 }
     );
   }
 }
