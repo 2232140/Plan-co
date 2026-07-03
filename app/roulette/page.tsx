@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import RouletteWheel from "@/components/roulette-wheel";
 import ResultModal from "@/components/result-modal";
 import AmidaKuji from "@/components/amida-kuji";
@@ -150,7 +150,7 @@ export default function RoulettePage() {
           {/* Header */}
           <header className="flex items-center mb-6">
             <button
-              onClick={() => router.push("/suggestions")}
+              onClick={() => router.back()}
               className="p-2 rounded-full bg-white/30 hover:bg-white/50 transition-colors active:scale-95"
             >
               <ArrowLeft size={20} className="text-white" />
@@ -176,7 +176,7 @@ export default function RoulettePage() {
               🎡 ルーレット
             </button>
             <button
-              onClick={() => setActiveTab("amida")}
+              onClick={() => { setSpinTrigger(0); setActiveTab("amida"); }}
               className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200 ${
                 activeTab === "amida"
                   ? "bg-white text-orange-400 shadow-md"
@@ -228,13 +228,6 @@ export default function RoulettePage() {
                     詳細を見る・ここに決定！
                   </button>
                 )}
-                <button
-                  onClick={() => router.push("/room/new")}
-                  className="w-full py-3 rounded-2xl font-bold text-blue-400 bg-blue-50 hover:bg-blue-100 transition-all text-sm flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <Users size={15} />
-                  友達と一緒に回す
-                </button>
               </div>
             </div>
           ) : (

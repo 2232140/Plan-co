@@ -69,6 +69,13 @@ export default function AmidaKuji({ items, onComplete }: Props) {
   const [path, setPath] = useState<number[]>([]);
   const [step, setStep] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const doneRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (phase === "done" && doneRef.current) {
+      doneRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [phase]);
 
   const pick = (col: number) => {
     if (phase !== "idle") return;
@@ -215,6 +222,7 @@ export default function AmidaKuji({ items, onComplete }: Props) {
           );
         })}
       </svg>
+      <div ref={doneRef} />
     </div>
   );
 }

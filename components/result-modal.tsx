@@ -11,9 +11,10 @@ interface ResultModalProps {
   onReSpin: () => void;
   onDecide?: () => void;
   reSpinLabel?: string;
+  hideMap?: boolean;
 }
 
-export default function ResultModal({ suggestion, location, onClose, onReSpin, onDecide, reSpinLabel }: ResultModalProps) {
+export default function ResultModal({ suggestion, location, onClose, onReSpin, onDecide, reSpinLabel, hideMap = false }: ResultModalProps) {
   const reSpinText = reSpinLabel ?? "もう一度ルーレットを回す";
   const ReSpinIcon = reSpinLabel ? Shuffle : RotateCcw;
   const mapsUrl = suggestion
@@ -90,17 +91,19 @@ export default function ResultModal({ suggestion, location, onClose, onReSpin, o
 
               {/* Action buttons */}
               <div className="space-y-3">
-                <a
-                  href={mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={onDecide}
-                  className="w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
-                  style={{ background: "linear-gradient(135deg, #FFB5A7 0%, #FEC89A 100%)" }}
-                >
-                  <MapPin size={20} />
-                  ここに決定！マップで開く
-                </a>
+                {!hideMap && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={onDecide}
+                    className="w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+                    style={{ background: "linear-gradient(135deg, #FFB5A7 0%, #FEC89A 100%)" }}
+                  >
+                    <MapPin size={20} />
+                    ここに決定！マップで開く
+                  </a>
+                )}
                 <button
                   onClick={onReSpin}
                   className="w-full py-3.5 rounded-2xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all text-sm flex items-center justify-center gap-2 active:scale-95"

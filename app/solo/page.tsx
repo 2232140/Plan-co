@@ -84,7 +84,7 @@ export default function SoloPage() {
         onTouchEnd={handleTouchEnd}>
         <div className={activeTab === 0 ? "block" : "hidden"}><LocationTab /></div>
         <div className={activeTab === 1 ? "block" : "hidden"}><DayPlanTab /></div>
-        <div className={activeTab === 2 ? "block" : "hidden"}><AIChatTab isActive={activeTab === 2} /></div>
+        <div className={activeTab === 2 ? "block" : "hidden"}><AIChatTab /></div>
         <div className={activeTab === 3 ? "block" : "hidden"}><RouletteTab /></div>
       </div>
     </div>

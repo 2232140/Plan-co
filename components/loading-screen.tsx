@@ -45,7 +45,7 @@ export default function LoadingScreen({ message, subMessage }: LoadingScreenProp
 
       {/* Message */}
       <div className="text-center space-y-2">
-        <p className="text-white font-extrabold text-xl tracking-wide">
+        <p className="text-white font-extrabold text-xl tracking-wide text-balance max-w-xs mx-auto text-center">
           {message ?? "Plan-coが楽しい予定を考え中"}
         </p>
         <div className="dot-pulse flex justify-center gap-1.5">

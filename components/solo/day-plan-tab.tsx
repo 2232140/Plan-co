@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { MapPin, Users, Wallet, Sparkles, Clock, AlertCircle, Loader2, RotateCcw } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { MapPin, Users, Wallet, Sparkles, Clock, AlertCircle, Loader2, RotateCcw, ChevronDown } from "lucide-react";
 import { DayPlan } from "@/app/api/suggest-day-plan/route";
 
 const PEOPLE_OPTIONS = ["1人", "2人", "3〜4人", "5人以上"];
 const BUDGET_OPTIONS = ["〜3,000円", "〜5,000円", "〜10,000円", "上限なし"];
-const DEPARTURE_OPTIONS = ["9:00", "10:00", "11:00", "12:00", "13:00"];
 const THEME_OPTIONS = [
   { value: "グルメ巡り",  emoji: "🍽️" },
   { value: "カフェ",     emoji: "☕" },
@@ -19,6 +18,60 @@ const SLOT_COLORS = ["#FFB5A7", "#B5EAD7", "#C7CEEA"];
 const SLOT_BG    = ["bg-rose-50", "bg-emerald-50", "bg-purple-50"];
 const SLOT_TEXT  = ["text-rose-500", "text-emerald-500", "text-purple-500"];
 
+const TIME_OPTIONS = [
+  "6:00","6:30","7:00","7:30","8:00","8:30","9:00","9:30",
+  "10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00",
+];
+const ITEM_H = 44;
+
+function TimePickerDrum({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const idx = TIME_OPTIONS.indexOf(value);
+    if (containerRef.current && idx !== -1) {
+      containerRef.current.scrollTop = idx * ITEM_H;
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleScroll = () => {
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      if (!containerRef.current) return;
+      const idx = Math.round(containerRef.current.scrollTop / ITEM_H);
+      const clamped = Math.max(0, Math.min(idx, TIME_OPTIONS.length - 1));
+      onChange(TIME_OPTIONS[clamped]);
+    }, 120);
+  };
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden bg-blue-50" style={{ height: ITEM_H * 3 }}>
+      <div className="pointer-events-none absolute inset-x-0 z-10"
+        style={{ top: ITEM_H, height: ITEM_H,
+                 background: "rgba(96,165,250,0.12)",
+                 borderTop: "1.5px solid #93c5fd",
+                 borderBottom: "1.5px solid #93c5fd" }} />
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-scroll snap-y snap-mandatory"
+        style={{ scrollbarWidth: "none" } as React.CSSProperties}
+      >
+        <div style={{ height: ITEM_H }} />
+        {TIME_OPTIONS.map((t) => (
+          <div key={t}
+            className="snap-center flex items-center justify-center text-sm font-bold"
+            style={{ height: ITEM_H, color: value === t ? "#3b82f6" : "#9ca3af" }}>
+            {t}
+          </div>
+        ))}
+        <div style={{ height: ITEM_H }} />
+      </div>
+    </div>
+  );
+}
+
 export default function DayPlanTab() {
   const [location, setLocation]       = useState("");
   const [people, setPeople]           = useState("2人");
@@ -29,6 +82,7 @@ export default function DayPlanTab() {
   const [isLoading, setIsLoading]     = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [plan, setPlan]               = useState<DayPlan | null>(null);
+  const [showExtra, setShowExtra]     = useState(false);
 
   const toggleTheme = (v: string) =>
     setSelectedThemes((p) => p.includes(v) ? p.filter((t) => t !== v) : [...p, v]);
@@ -36,7 +90,6 @@ export default function DayPlanTab() {
   const handleGenerate = async () => {
     setError(null);
     setIsLoading(true);
-    setPlan(null);
     try {
       const themeStr = [...selectedThemes, theme.trim()].filter(Boolean).join("・") || "なんでも";
       const res = await fetch("/api/suggest-day-plan", {
@@ -47,6 +100,7 @@ export default function DayPlanTab() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "生成に失敗しました"); }
       const data = await res.json() as { plan: DayPlan };
       setPlan(data.plan);
+      setShowExtra(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました");
     } finally {
@@ -90,9 +144,44 @@ export default function DayPlanTab() {
             </div>
           ))}
 
+          {/* Extra spots collapsible */}
+          {plan.extraSpots && plan.extraSpots.length > 0 && (
+            <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-lg overflow-hidden">
+              <button onClick={() => setShowExtra((v) => !v)}
+                className="w-full px-5 py-4 flex items-center justify-between active:bg-gray-50 transition-colors">
+                <span className="font-extrabold text-gray-700 text-sm">✨ その他おすすめスポット</span>
+                <ChevronDown size={18} className={`text-gray-400 transition-transform duration-200 ${showExtra ? "rotate-180" : ""}`} />
+              </button>
+              {showExtra && (
+                <div className="px-5 pb-4 space-y-3">
+                  {plan.extraSpots.map((spot, i) => (
+                    <div key={i} className="flex items-start gap-3 bg-orange-50 rounded-2xl p-3">
+                      <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center text-orange-400 font-extrabold text-xs shrink-0">
+                        {i + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="font-extrabold text-gray-800 text-sm">{spot.spotName}</p>
+                          <span className="text-xs text-orange-400 bg-orange-100 px-2 py-0.5 rounded-full font-bold shrink-0">{spot.category}</span>
+                        </div>
+                        <p className="text-gray-500 text-xs leading-relaxed">{spot.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <button onClick={handleGenerate} disabled={isLoading}
+            className="w-full py-3 rounded-2xl font-bold text-white shadow-lg transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2"
+            style={{ background: "linear-gradient(135deg, #FFB5A7 0%, #FEC89A 100%)" }}>
+            {isLoading ? <><Loader2 size={16} className="animate-spin" />再生成中...</> : "🔄 同じ条件で再生成"}
+          </button>
           <button onClick={() => setPlan(null)}
             className="w-full py-3 rounded-2xl font-bold text-white/80 bg-white/20 hover:bg-white/30 transition-all text-sm flex items-center justify-center gap-2 active:scale-95">
-            <RotateCcw size={14} />もう一度作る
+            <RotateCcw size={14} />条件を変える
           </button>
         </div>
       )}
@@ -111,20 +200,16 @@ export default function DayPlanTab() {
               className="w-full px-4 py-2.5 rounded-2xl border-2 border-rose-100 bg-rose-50 text-gray-700 font-bold placeholder:text-gray-300 placeholder:font-normal focus:outline-none focus:border-rose-300 text-sm" />
           </section>
 
-          {/* Departure */}
+          {/* Departure — drum picker */}
           <section>
-            <div className="flex items-center gap-2 mb-2">
-              <Clock size={15} className="text-blue-400" />
-              <span className="font-extrabold text-gray-700 text-sm">出発時間</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-blue-400" />
+                <span className="font-extrabold text-gray-700 text-sm">出発時間</span>
+              </div>
+              <span className="text-blue-500 font-extrabold text-sm">{departure}</span>
             </div>
-            <div className="flex gap-2 flex-wrap">
-              {DEPARTURE_OPTIONS.map((v) => (
-                <button key={v} onClick={() => setDeparture(v)}
-                  className={`px-3 py-1.5 rounded-2xl text-sm font-bold transition-all ${departure === v ? "bg-blue-400 text-white shadow-md scale-105" : "bg-blue-50 text-blue-500 active:scale-95"}`}>
-                  {v}
-                </button>
-              ))}
-            </div>
+            <TimePickerDrum value={departure} onChange={setDeparture} />
           </section>
 
           {/* People */}

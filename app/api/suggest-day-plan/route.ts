@@ -12,6 +12,7 @@ export interface DayPlan {
   title: string;
   totalBudget: string;
   timeline: DayPlanSlot[];
+  extraSpots?: { spotName: string; category: string; description: string }[];
 }
 
 function extractJson(text: string): string | null {
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 以下のJSON形式のみを返してください。マークダウンコードブロック禁止。前後にテキスト不可。
 
-{"title":"20文字以内のタイトル","totalBudget":"総予算目安","timeline":[{"timeSlot":"朝 (${departureTime}〜)","spotName":"15文字以内のスポット名","description":"60文字以内の説明","duration":"滞在時間目安"},{"timeSlot":"昼 (12:30〜)","spotName":"15文字以内のスポット名","description":"60文字以内の説明","duration":"滞在時間目安"},{"timeSlot":"夜 (17:00〜)","spotName":"15文字以内のスポット名","description":"60文字以内の説明","duration":"滞在時間目安"}]}`;
+{"title":"20文字以内のタイトル","totalBudget":"総予算目安","timeline":[{"timeSlot":"朝 (${departureTime}〜)","spotName":"15文字以内のスポット名","description":"60文字以内の説明","duration":"滞在時間目安"},{"timeSlot":"昼 (12:30〜)","spotName":"15文字以内のスポット名","description":"60文字以内の説明","duration":"滞在時間目安"},{"timeSlot":"夜 (17:00〜)","spotName":"15文字以内のスポット名","description":"60文字以内の説明","duration":"滞在時間目安"}],"extraSpots":[{"spotName":"10文字以内","category":"カテゴリ(例:カフェ/展望台/ショップ)","description":"40文字以内の説明"},{"spotName":"...","category":"...","description":"..."},{"spotName":"...","category":"...","description":"..."}]}`;
 
   const ai = new GoogleGenAI({ apiKey });
   try {

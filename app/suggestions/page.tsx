@@ -68,7 +68,7 @@ export default function SuggestionsPage() {
           {/* Header */}
           <header className="flex items-center mb-6">
             <button
-              onClick={() => router.push("/")}
+              onClick={() => router.back()}
               className="p-2 rounded-full bg-white/30 hover:bg-white/50 transition-colors active:scale-95"
             >
               <ArrowLeft size={20} className="text-white" />

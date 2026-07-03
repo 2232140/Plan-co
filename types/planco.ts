@@ -26,3 +26,23 @@ export interface HistoryEntry {
   options: string[];
   selected_option: string;
 }
+
+export interface DayPlanSlot {
+  timeSlot: string;
+  spotName: string;
+  description: string;
+  duration: string;
+}
+
+export interface ExtraSpot {
+  spotName: string;
+  category: string;
+  description: string;
+}
+
+export interface DayPlan {
+  title: string;
+  totalBudget: string;
+  timeline: DayPlanSlot[];
+  extraSpots?: ExtraSpot[];
+}

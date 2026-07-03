@@ -84,6 +84,7 @@ export default function RouletteTab() {
         onClose={() => setSelected(null)}
         onReSpin={handleReSpin}
         reSpinLabel={mode === "amida" ? "もう一度あみだくじをする" : undefined}
+        hideMap={true}
       />
 
       <div className="px-4 py-5 space-y-4">
@@ -126,7 +127,7 @@ export default function RouletteTab() {
             className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200 ${mode === "roulette" ? "bg-white text-orange-400 shadow-md" : "text-white/80"}`}>
             🎡 ルーレット
           </button>
-          <button onClick={() => setMode("amida")}
+          <button onClick={() => { setSpinTrigger(0); setMode("amida"); }}
             className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200 ${mode === "amida" ? "bg-white text-orange-400 shadow-md" : "text-white/80"}`}>
             🪜 あみだくじ
           </button>
