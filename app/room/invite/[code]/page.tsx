@@ -7,6 +7,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import SwingAvatar, { AVATAR_COLORS, AvatarColor } from "@/components/ui/swing-avatar";
+import RouletteWheel from "@/components/roulette-wheel";
+import ResultModal from "@/components/result-modal";
+import { Suggestion } from "@/types/planco";
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface PresenceMember {
   nickname: string;
@@ -41,7 +46,9 @@ interface MemberRecord {
   avatar_color: string;
 }
 
-type Phase = "voting" | "suggesting" | "results";
+type Phase = "voting" | "suggesting" | "results" | "roulette";
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const VOTE_TAGS = [
   { name: "食べたい", emoji: "🍜" },
@@ -56,6 +63,8 @@ const VOTE_TAGS = [
 
 const HEART_PARTICLES = ["❤️", "💕", "💗", "✨"];
 
+// ── Sub-components ───────────────────────────────────────────────────────────
+
 function HeartParticles({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -64,11 +73,7 @@ function HeartParticles({ show }: { show: boolean }) {
         <span
           key={i}
           className="absolute text-lg animate-float-up"
-          style={{
-            left: `${20 + i * 20}%`,
-            bottom: "40%",
-            animationDelay: `${i * 0.1}s`,
-          }}
+          style={{ left: `${20 + i * 20}%`, bottom: "40%", animationDelay: `${i * 0.1}s` }}
         >
           {emoji}
         </span>
@@ -76,6 +81,8 @@ function HeartParticles({ show }: { show: boolean }) {
     </div>
   );
 }
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InviteRoomPage({
   params,
@@ -85,7 +92,7 @@ export default function InviteRoomPage({
   const { code } = use(params);
   const router = useRouter();
 
-  // ── Basic state ──────────────────────────────────────────
+  // Basic
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -100,7 +107,7 @@ export default function InviteRoomPage({
   const [members, setMembers] = useState<PresenceMember[]>([]);
   const [copied, setCopied] = useState(false);
 
-  // ── Step 3 state ─────────────────────────────────────────
+  // Phase & data
   const [phase, setPhase] = useState<Phase>("voting");
   const [memberRecords, setMemberRecords] = useState<MemberRecord[]>([]);
   const [voteRows, setVoteRows] = useState<VoteRow[]>([]);
@@ -110,12 +117,22 @@ export default function InviteRoomPage({
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [likeAnimating, setLikeAnimating] = useState<string | null>(null);
 
+  // Roulette
+  const [spinTrigger, setSpinTrigger] = useState(0);
+  const [syncedTarget, setSyncedTarget] = useState<number | undefined>(undefined);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [winnerCandidate, setWinnerCandidate] = useState<Candidate | null>(null);
+  const [showWinnerModal, setShowWinnerModal] = useState(false);
+  const baseRotationRef = useRef(0);
+
   const presenceRef = useRef<RealtimeChannel | null>(null);
   const realtimeRef = useRef<RealtimeChannel | null>(null);
+  const broadcastRef = useRef<RealtimeChannel | null>(null);
 
   const formatCode = (c: string) => `${c.slice(0, 3)} ${c.slice(3)}`;
 
-  // ── Computed ─────────────────────────────────────────────
+  // ── Computed ──────────────────────────────────────────────────────────────
+
   const tagVoteMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const t of VOTE_TAGS) map[t.name] = [];
@@ -147,35 +164,58 @@ export default function InviteRoomPage({
     return map;
   }, [memberRecords]);
 
-  // ── Load initial data ─────────────────────────────────────
-  const loadInitialData = useCallback(async (rId: string) => {
-    if (!supabase) return;
+  // Top 4 candidates by likes — used as roulette items
+  const rouletteItems = useMemo(
+    () =>
+      [...candidates]
+        .sort((a, b) => (likeCountMap[b.id] ?? 0) - (likeCountMap[a.id] ?? 0))
+        .slice(0, 4),
+    [candidates, likeCountMap]
+  );
 
-    const [membersRes, votesRes, candidatesRes] = await Promise.all([
-      supabase.from("room_members").select("id, nickname, avatar_color").eq("room_id", rId),
-      supabase.from("room_votes").select("id, member_id, tag_name").eq("room_id", rId),
-      supabase.from("room_candidates").select("id, name, description, budget, reason").eq("room_id", rId).order("created_at"),
-    ]);
+  // ── Initial data load ─────────────────────────────────────────────────────
 
-    if (membersRes.data) setMemberRecords(membersRes.data as MemberRecord[]);
-    if (votesRes.data) setVoteRows(votesRes.data as VoteRow[]);
+  const loadInitialData = useCallback(
+    async (rId: string, roomStatus: string, existingWinnerId: string | null) => {
+      if (!supabase) return;
 
-    if (candidatesRes.data && candidatesRes.data.length > 0) {
-      const cands = candidatesRes.data as Candidate[];
-      setCandidates(cands);
-      setPhase("results");
+      const [membersRes, votesRes, candidatesRes] = await Promise.all([
+        supabase.from("room_members").select("id, nickname, avatar_color").eq("room_id", rId),
+        supabase.from("room_votes").select("id, member_id, tag_name").eq("room_id", rId),
+        supabase
+          .from("room_candidates")
+          .select("id, name, description, budget, reason")
+          .eq("room_id", rId)
+          .order("created_at"),
+      ]);
 
-      const { data: likeData } = await supabase
-        .from("room_candidate_likes")
-        .select("id, candidate_id, member_id");
-      if (likeData) {
-        const candidateIds = new Set(cands.map((c) => c.id));
-        setLikeRows((likeData as LikeRow[]).filter((l) => candidateIds.has(l.candidate_id)));
+      if (membersRes.data) setMemberRecords(membersRes.data as MemberRecord[]);
+      if (votesRes.data) setVoteRows(votesRes.data as VoteRow[]);
+
+      const cands = (candidatesRes.data ?? []) as Candidate[];
+      if (cands.length > 0) {
+        setCandidates(cands);
+        setPhase(roomStatus === "roulette" ? "roulette" : "results");
+
+        const { data: likeData } = await supabase
+          .from("room_candidate_likes")
+          .select("id, candidate_id, member_id");
+        if (likeData) {
+          const cids = new Set(cands.map((c) => c.id));
+          setLikeRows((likeData as LikeRow[]).filter((l) => cids.has(l.candidate_id)));
+        }
+
+        if (existingWinnerId) {
+          const winner = cands.find((c) => c.id === existingWinnerId);
+          if (winner) setWinnerCandidate(winner);
+        }
       }
-    }
-  }, []);
+    },
+    []
+  );
 
-  // ── Fetch room on mount ───────────────────────────────────
+  // ── Fetch room on mount ───────────────────────────────────────────────────
+
   useEffect(() => {
     if (!supabase) {
       setError("Supabaseが設定されていません");
@@ -185,7 +225,7 @@ export default function InviteRoomPage({
 
     supabase
       .from("rooms")
-      .select("id")
+      .select("id, status, selected_candidate_id")
       .eq("invite_code", code)
       .maybeSingle()
       .then(({ data, error: e }) => {
@@ -194,8 +234,12 @@ export default function InviteRoomPage({
           setLoading(false);
           return;
         }
+
         const rId = data.id as string;
+        const roomStatus = (data.status as string) ?? "setup";
+        const existingWinnerId = (data.selected_candidate_id as string | null) ?? null;
         setRoomId(rId);
+        if (roomStatus === "roulette") setPhase("roulette");
 
         const savedNickname = sessionStorage.getItem("planco_nickname");
         const savedColor = sessionStorage.getItem("planco_avatar_color") as AvatarColor | null;
@@ -221,11 +265,12 @@ export default function InviteRoomPage({
           setLoading(false);
         }
 
-        loadInitialData(rId);
+        loadInitialData(rId, roomStatus, existingWinnerId);
       });
   }, [code, loadInitialData]);
 
-  // ── Presence channel ──────────────────────────────────────
+  // ── Presence channel ──────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!supabase || !myNickname || !myUserId || !roomId) return;
 
@@ -257,17 +302,24 @@ export default function InviteRoomPage({
       });
 
     presenceRef.current = channel;
-    return () => {
-      supabase?.removeChannel(channel);
-    };
+    return () => { supabase?.removeChannel(channel); };
   }, [myNickname, myAvatarColor, myIsHost, myUserId, roomId, code]);
 
-  // ── Realtime DB changes ───────────────────────────────────
+  // ── Realtime DB changes ───────────────────────────────────────────────────
+
   useEffect(() => {
     if (!supabase || !roomId) return;
 
     const channel = supabase
       .channel(`room-step3-${roomId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
+        (payload) => {
+          const updated = payload.new as { status?: string; selected_candidate_id?: string };
+          if (updated.status === "roulette") setPhase("roulette");
+        }
+      )
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "room_votes", filter: `room_id=eq.${roomId}` },
@@ -292,10 +344,7 @@ export default function InviteRoomPage({
         { event: "INSERT", schema: "public", table: "room_candidates", filter: `room_id=eq.${roomId}` },
         (payload) => {
           const newCand = payload.new as Candidate;
-          setCandidates((prev) => {
-            const next = [...prev.filter((c) => c.id !== newCand.id), newCand];
-            return next;
-          });
+          setCandidates((prev) => [...prev.filter((c) => c.id !== newCand.id), newCand]);
           setPhase("results");
           setSuggesting(false);
         }
@@ -322,12 +371,36 @@ export default function InviteRoomPage({
       .subscribe();
 
     realtimeRef.current = channel;
-    return () => {
-      supabase?.removeChannel(channel);
-    };
+    return () => { supabase?.removeChannel(channel); };
   }, [roomId]);
 
-  // ── Handlers ──────────────────────────────────────────────
+  // ── Broadcast channel (roulette spin sync) ────────────────────────────────
+
+  useEffect(() => {
+    if (!supabase || !roomId) return;
+
+    const channel = supabase.channel(`room-bc-${roomId}`, {
+      config: { broadcast: { self: true } },
+    });
+
+    channel
+      .on("broadcast", { event: "SPIN" }, ({ payload }) => {
+        const { targetRotation } = payload as { targetRotation: number };
+        baseRotationRef.current = targetRotation;
+        setSyncedTarget(targetRotation);
+        setSpinTrigger((t) => t + 1);
+        setIsSpinning(true);
+        setWinnerCandidate(null);
+        setShowWinnerModal(false);
+      })
+      .subscribe();
+
+    broadcastRef.current = channel;
+    return () => { supabase?.removeChannel(channel); };
+  }, [roomId]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
   const handleDialogJoin = async () => {
     const name = pendingNickname.trim();
     if (!name || !supabase || !roomId) return;
@@ -364,7 +437,6 @@ export default function InviteRoomPage({
       setMyIsHost(false);
       setShowNicknameDialog(false);
 
-      // Refresh member records for avatar display
       const { data: updatedMembers } = await supabase
         .from("room_members")
         .select("id, nickname, avatar_color")
@@ -382,7 +454,6 @@ export default function InviteRoomPage({
     const alreadyVoted = myTagVoteSet.has(tagName);
 
     if (alreadyVoted) {
-      // Optimistic remove
       setVoteRows((prev) =>
         prev.filter((v) => !(v.member_id === myMemberId && v.tag_name === tagName))
       );
@@ -427,7 +498,6 @@ export default function InviteRoomPage({
         const { error: errMsg } = await res.json();
         throw new Error(errMsg ?? "AI提案に失敗しました");
       }
-      // Candidates will arrive via Realtime subscription
     } catch (e) {
       setSuggestError(e instanceof Error ? e.message : "AI提案に失敗しました");
       setSuggesting(false);
@@ -451,10 +521,7 @@ export default function InviteRoomPage({
       setLikeAnimating(candidateId);
       setTimeout(() => setLikeAnimating(null), 900);
       const tempId = `temp-${Date.now()}`;
-      setLikeRows((prev) => [
-        ...prev,
-        { id: tempId, candidate_id: candidateId, member_id: myMemberId },
-      ]);
+      setLikeRows((prev) => [...prev, { id: tempId, candidate_id: candidateId, member_id: myMemberId }]);
       const { data } = await supabase
         .from("room_candidate_likes")
         .insert({ candidate_id: candidateId, member_id: myMemberId })
@@ -465,6 +532,60 @@ export default function InviteRoomPage({
       }
     }
   };
+
+  const handleStartRoulette = async () => {
+    if (!supabase || !roomId) return;
+    setPhase("roulette"); // optimistic
+    await supabase.from("rooms").update({ status: "roulette" }).eq("id", roomId);
+  };
+
+  const handleSpin = useCallback(() => {
+    if (isSpinning || rouletteItems.length === 0 || !broadcastRef.current) return;
+
+    const N = rouletteItems.length;
+    const SECTOR_ANGLE = 360 / N;
+    const extra = Math.random() * 360;
+    const newTarget = baseRotationRef.current + 360 * 7 + extra;
+    const normalized = (360 - (newTarget % 360)) % 360;
+    const winnerIdx = Math.floor(normalized / SECTOR_ANGLE) % N;
+    const winnerName = rouletteItems[winnerIdx].name;
+
+    broadcastRef.current.send({
+      type: "broadcast",
+      event: "SPIN",
+      payload: { targetRotation: newTarget, winnerName, startTime: Date.now() },
+    });
+  }, [isSpinning, rouletteItems]);
+
+  const handleRouletteComplete = useCallback(
+    (winnerName: string) => {
+      const found = rouletteItems.find((c) => c.name === winnerName) ?? null;
+      setWinnerCandidate(found);
+      setIsSpinning(false);
+      if (found) setShowWinnerModal(true);
+
+      // Confetti
+      if (typeof window !== "undefined") {
+        import("canvas-confetti").then(({ default: confetti }) => {
+          confetti({ particleCount: 160, spread: 80, origin: { y: 0.6 } });
+          setTimeout(
+            () => confetti({ particleCount: 80, spread: 120, origin: { y: 0.8, x: 0.1 } }),
+            350
+          );
+          setTimeout(
+            () => confetti({ particleCount: 80, spread: 120, origin: { y: 0.8, x: 0.9 } }),
+            700
+          );
+        });
+      }
+
+      // Persist winner to DB
+      if (supabase && roomId && found) {
+        supabase.from("rooms").update({ selected_candidate_id: found.id }).eq("id", roomId);
+      }
+    },
+    [rouletteItems, roomId]
+  );
 
   const handleShare = async () => {
     const url = window.location.href;
@@ -478,7 +599,8 @@ export default function InviteRoomPage({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // ── Loading ───────────────────────────────────────────────
+  // ── Loading / Error ───────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <main
@@ -515,6 +637,8 @@ export default function InviteRoomPage({
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <>
       {/* Nickname Dialog */}
@@ -545,11 +669,25 @@ export default function InviteRoomPage({
         </div>
       )}
 
+      {/* Winner Modal */}
+      <ResultModal
+        suggestion={showWinnerModal ? (winnerCandidate as unknown as Suggestion) : null}
+        location=""
+        onClose={() => setShowWinnerModal(false)}
+        onReSpin={() => {
+          setShowWinnerModal(false);
+          setWinnerCandidate(null);
+          if (myIsHost) handleSpin();
+        }}
+        reSpinLabel="もう一度回す"
+      />
+
       <main
         className="min-h-screen pb-10"
         style={{ background: "linear-gradient(160deg, #FFB5A7 0%, #FEC89A 100%)" }}
       >
         <div className="max-w-md mx-auto px-4 py-6">
+
           {/* Header */}
           <header className="flex items-center mb-6">
             <button
@@ -560,7 +698,7 @@ export default function InviteRoomPage({
             </button>
             <div className="flex-1 text-center">
               <h1 className="text-xl font-extrabold text-white drop-shadow-md">
-                みんなで決める 👥
+                {phase === "roulette" ? "🎡 ルーレット！" : "みんなで決める 👥"}
               </h1>
             </div>
             <button
@@ -571,23 +709,25 @@ export default function InviteRoomPage({
             </button>
           </header>
 
-          {/* Invite code card */}
-          <div className="bg-white rounded-3xl p-5 shadow-2xl mb-5">
-            <p className="text-xs font-extrabold text-gray-400 mb-2 text-center tracking-widest uppercase">
-              招待コード
-            </p>
-            <div className="flex items-center justify-center gap-4">
-              <p className="text-4xl font-extrabold tracking-widest text-gray-800">
-                {formatCode(code)}
+          {/* Invite code */}
+          {phase !== "roulette" && (
+            <div className="bg-white rounded-3xl p-5 shadow-2xl mb-5">
+              <p className="text-xs font-extrabold text-gray-400 mb-2 text-center tracking-widest uppercase">
+                招待コード
               </p>
-              <button
-                onClick={handleCopyCode}
-                className="p-2.5 rounded-xl bg-orange-100 text-orange-400 hover:bg-orange-200 transition-colors active:scale-95"
-              >
-                {copied ? <Check size={18} /> : <Copy size={18} />}
-              </button>
+              <div className="flex items-center justify-center gap-4">
+                <p className="text-4xl font-extrabold tracking-widest text-gray-800">
+                  {formatCode(code)}
+                </p>
+                <button
+                  onClick={handleCopyCode}
+                  className="p-2.5 rounded-xl bg-orange-100 text-orange-400 hover:bg-orange-200 transition-colors active:scale-95"
+                >
+                  {copied ? <Check size={18} /> : <Copy size={18} />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Members */}
           <p className="text-white font-extrabold text-center mb-3 text-lg">
@@ -624,8 +764,10 @@ export default function InviteRoomPage({
             )}
           </div>
 
-          {/* ── VOTING PHASE ──────────────────────────────── */}
+          {/* ── Phase content ────────────────────────────── */}
           <AnimatePresence mode="wait">
+
+            {/* VOTING */}
             {phase === "voting" && (
               <motion.div
                 key="voting"
@@ -657,20 +799,16 @@ export default function InviteRoomPage({
                               : "border-gray-100 bg-gray-50 hover:border-orange-200"
                           }`}
                         >
-                          {/* Voter mini-avatars */}
                           {voters.length > 0 && (
                             <div className="flex justify-center gap-0.5 mb-1 flex-wrap">
-                              {voters.slice(0, 4).map((memberId) => {
-                                const color = memberColorMap[memberId] ?? "orange";
-                                return (
-                                  <SwingAvatar
-                                    key={memberId}
-                                    color={color as AvatarColor}
-                                    size={20}
-                                    swing={false}
-                                  />
-                                );
-                              })}
+                              {voters.slice(0, 4).map((memberId) => (
+                                <SwingAvatar
+                                  key={memberId}
+                                  color={(memberColorMap[memberId] ?? "orange") as AvatarColor}
+                                  size={20}
+                                  swing={false}
+                                />
+                              ))}
                               {voters.length > 4 && (
                                 <span className="text-xs text-gray-400 font-bold self-end">
                                   +{voters.length - 4}
@@ -679,17 +817,11 @@ export default function InviteRoomPage({
                             </div>
                           )}
                           <span className="text-2xl">{tag.emoji}</span>
-                          <span
-                            className={`text-xs font-extrabold ${
-                              voted ? "text-orange-500" : "text-gray-600"
-                            }`}
-                          >
+                          <span className={`text-xs font-extrabold ${voted ? "text-orange-500" : "text-gray-600"}`}>
                             {tag.name}
                           </span>
                           {voters.length > 0 && (
-                            <span className="text-xs font-bold text-orange-400">
-                              {voters.length}票
-                            </span>
+                            <span className="text-xs font-bold text-orange-400">{voters.length}票</span>
                           )}
                         </motion.button>
                       );
@@ -697,7 +829,6 @@ export default function InviteRoomPage({
                   </div>
                 </div>
 
-                {/* Host decide button */}
                 {myIsHost && (
                   <div className="space-y-2">
                     {suggestError && (
@@ -734,61 +865,30 @@ export default function InviteRoomPage({
                   </div>
                 )}
 
-                {/* Non-host waiting message */}
                 {!myIsHost && members.length >= 2 && (
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-white/30 rounded-2xl px-5 py-3 text-center"
                   >
-                    <p className="text-white font-extrabold text-base">
-                      🎉 みんな集まってきたね！
-                    </p>
-                    <p className="text-white/80 text-sm mt-1">
-                      ホストが決定するまで投票しよう ✨
-                    </p>
+                    <p className="text-white font-extrabold text-base">🎉 みんな集まってきたね！</p>
+                    <p className="text-white/80 text-sm mt-1">ホストが決定するまで投票しよう ✨</p>
                   </motion.div>
                 )}
               </motion.div>
             )}
 
-            {/* ── SUGGESTING PHASE ────────────────────────── */}
-            {phase === "suggesting" && (
-              <motion.div
-                key="suggesting"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-white rounded-3xl p-8 shadow-xl text-center"
-              >
-                <p className="text-4xl mb-4">🤖</p>
-                <p className="font-extrabold text-gray-800 text-lg">AIが考えています...</p>
-                <p className="text-gray-400 text-sm mt-2">みんなの希望に合うスポットを探索中</p>
-                <div className="flex justify-center gap-1.5 mt-5">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="w-3 h-3 rounded-full bg-orange-300 animate-dot-pulse"
-                      style={{ animationDelay: `${i * 0.2}s` }}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* ── RESULTS PHASE ───────────────────────────── */}
+            {/* RESULTS */}
             {phase === "results" && (
               <motion.div
                 key="results"
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
                 className="space-y-4"
               >
-                <p className="text-white font-extrabold text-center text-lg">
-                  🎯 AIのおすすめスポット
-                </p>
-                <p className="text-white/70 text-center text-sm -mt-2">
-                  ❤️ で気に入ったを教えよう！
-                </p>
+                <p className="text-white font-extrabold text-center text-lg">🎯 AIのおすすめスポット</p>
+                <p className="text-white/70 text-center text-sm -mt-2">❤️ で気に入ったを教えよう！</p>
 
                 <AnimatePresence>
                   {candidates.map((c, idx) => (
@@ -800,18 +900,13 @@ export default function InviteRoomPage({
                       className="bg-white rounded-3xl p-5 shadow-xl relative overflow-hidden"
                     >
                       <HeartParticles show={likeAnimating === c.id} />
-
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
                           <p className="font-extrabold text-gray-800 text-base">{c.name}</p>
                           <p className="text-orange-400 font-bold text-xs mt-0.5">{c.budget}</p>
-                          <p className="text-gray-500 text-sm mt-2 leading-relaxed">
-                            {c.description}
-                          </p>
+                          <p className="text-gray-500 text-sm mt-2 leading-relaxed">{c.description}</p>
                           <p className="text-gray-400 text-xs mt-2 italic">💡 {c.reason}</p>
                         </div>
-
-                        {/* Like button */}
                         <button
                           onClick={() => handleLike(c.id)}
                           className={`flex flex-col items-center gap-1 p-2.5 rounded-2xl transition-all active:scale-90 min-w-[52px] ${
@@ -820,18 +915,12 @@ export default function InviteRoomPage({
                               : "bg-gray-50 text-gray-400 hover:bg-rose-50 hover:text-rose-400"
                           }`}
                         >
-                          <span
-                            className={`text-2xl ${myLikeSet.has(c.id) ? "animate-heart-pop" : ""}`}
-                          >
+                          <span className={`text-2xl ${myLikeSet.has(c.id) ? "animate-heart-pop" : ""}`}>
                             {myLikeSet.has(c.id) ? "❤️" : "🤍"}
                           </span>
-                          <span className="text-xs font-extrabold">
-                            {likeCountMap[c.id] ?? 0}
-                          </span>
+                          <span className="text-xs font-extrabold">{likeCountMap[c.id] ?? 0}</span>
                         </button>
                       </div>
-
-                      {/* Like bar */}
                       {(likeCountMap[c.id] ?? 0) > 0 && (
                         <div className="mt-3 flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -853,22 +942,114 @@ export default function InviteRoomPage({
                   ))}
                 </AnimatePresence>
 
-                {candidates.length === 0 && (
-                  <div className="bg-white rounded-3xl p-8 shadow-xl text-center">
-                    <div className="flex justify-center gap-1.5">
-                      {[0, 1, 2].map((i) => (
-                        <span
-                          key={i}
-                          className="w-3 h-3 rounded-full bg-orange-300 animate-dot-pulse"
-                          style={{ animationDelay: `${i * 0.2}s` }}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-gray-400 font-bold text-sm mt-3">スポットを受信中...</p>
-                  </div>
+                {/* Host: start roulette */}
+                {myIsHost && candidates.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-2 pt-2"
+                  >
+                    <button
+                      onClick={handleStartRoulette}
+                      className="w-full py-4 rounded-2xl font-extrabold text-white text-lg shadow-lg transition-all active:scale-95"
+                      style={{ background: "linear-gradient(135deg, #FB923C 0%, #F472B6 100%)" }}
+                    >
+                      みんなで決める 🎡
+                    </button>
+                    <p className="text-white/70 text-xs text-center">
+                      ホストのみ表示 · ❤️ の多い順でルーレットが始まります
+                    </p>
+                  </motion.div>
                 )}
               </motion.div>
             )}
+
+            {/* ROULETTE */}
+            {phase === "roulette" && (
+              <motion.div
+                key="roulette"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-4"
+              >
+                {/* Top items */}
+                <div className="bg-white/30 rounded-2xl px-4 py-3">
+                  <p className="text-white text-xs font-bold mb-2">❤️ いいね上位スポット</p>
+                  <div className="flex flex-wrap gap-2">
+                    {rouletteItems.map((c) => (
+                      <span
+                        key={c.id}
+                        className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/70 text-orange-500"
+                      >
+                        {c.name}
+                        {(likeCountMap[c.id] ?? 0) > 0 && (
+                          <span className="ml-1 text-rose-500">❤️{likeCountMap[c.id]}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Wheel */}
+                <div className="bg-white/85 backdrop-blur-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center">
+                  {isSpinning && (
+                    <p className="text-xs font-bold text-orange-400 mb-3 animate-pulse">
+                      🎡 ルーレット回転中...
+                    </p>
+                  )}
+                  <RouletteWheel
+                    items={rouletteItems.map((c) => c.name)}
+                    spinTrigger={spinTrigger}
+                    onComplete={handleRouletteComplete}
+                    syncedTarget={syncedTarget}
+                  />
+                  {winnerCandidate && !isSpinning && (
+                    <div className="mt-5 text-center animate-pop-in">
+                      <p className="text-xs text-gray-400 font-bold tracking-widest">決まりました！</p>
+                      <p className="text-3xl font-extrabold text-orange-500 mt-1">
+                        {winnerCandidate.name} 🎉
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Host: spin / Guest: wait */}
+                {myIsHost ? (
+                  <button
+                    onClick={handleSpin}
+                    disabled={isSpinning}
+                    className="w-full py-4 rounded-2xl font-extrabold text-white text-lg shadow-lg transition-all active:scale-95 disabled:opacity-70"
+                    style={{ background: "linear-gradient(135deg, #FFB5A7 0%, #FEC89A 100%)" }}
+                  >
+                    {isSpinning ? "🌀 回転中..." : winnerCandidate ? "🔄 もう一度回す" : "回す！🎡"}
+                  </button>
+                ) : (
+                  <div className="bg-white/30 rounded-2xl px-5 py-4 text-center">
+                    {isSpinning ? (
+                      <p className="text-white font-extrabold text-base animate-pulse">
+                        🎡 回っています！ドキドキ...
+                      </p>
+                    ) : (
+                      <p className="text-white font-extrabold text-base">
+                        ⏳ ホストが回すのを待っています...
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Show result again */}
+                {winnerCandidate && !isSpinning && (
+                  <button
+                    onClick={() => setShowWinnerModal(true)}
+                    className="w-full py-4 rounded-2xl font-extrabold text-white text-lg shadow-lg active:scale-95 bg-emerald-400 hover:bg-emerald-500 transition-all"
+                  >
+                    詳細を見る・ここに決定！✨
+                  </button>
+                )}
+              </motion.div>
+            )}
+
           </AnimatePresence>
         </div>
       </main>
