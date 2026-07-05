@@ -57,24 +57,23 @@ export default function JoinPage() {
         id: roomId,
         invite_code: code,
         status: "setup",
-        suggestions: null,
-        location: null,
       });
       if (roomErr) throw new Error("ルームの作成に失敗しました");
 
       const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-      const { error: memberErr } = await supabase.from("room_members").insert({
+      const { data: memberData, error: memberErr } = await supabase.from("room_members").insert({
         room_id: roomId,
         nickname: nickname.trim(),
         avatar_color: color,
         is_host: true,
-      });
-      if (memberErr) throw new Error("メンバーの登録に失敗しました");
+      }).select("id").single();
+      if (memberErr || !memberData) throw new Error("メンバーの登録に失敗しました");
 
       sessionStorage.setItem("planco_nickname", nickname.trim());
       sessionStorage.setItem("planco_avatar_color", color);
       sessionStorage.setItem("planco_is_host", "true");
       sessionStorage.setItem("planco_userId", crypto.randomUUID());
+      sessionStorage.setItem("planco_memberId", memberData.id);
 
       setCreatedCode(code);
       setCreatedRoomId(roomId);
@@ -114,18 +113,19 @@ export default function JoinPage() {
       const available = unusedColors.length > 0 ? unusedColors : [...AVATAR_COLORS];
       const color = available[Math.floor(Math.random() * available.length)] as AvatarColor;
 
-      const { error: memberErr } = await supabase.from("room_members").insert({
+      const { data: memberData, error: memberErr } = await supabase.from("room_members").insert({
         room_id: room.id,
         nickname: nickname.trim(),
         avatar_color: color,
         is_host: false,
-      });
-      if (memberErr) throw new Error("ルームへの参加に失敗しました");
+      }).select("id").single();
+      if (memberErr || !memberData) throw new Error("ルームへの参加に失敗しました");
 
       sessionStorage.setItem("planco_nickname", nickname.trim());
       sessionStorage.setItem("planco_avatar_color", color);
       sessionStorage.setItem("planco_is_host", "false");
       sessionStorage.setItem("planco_userId", crypto.randomUUID());
+      sessionStorage.setItem("planco_memberId", memberData.id);
 
       router.push(`/room/invite/${codeInput}`);
     } catch (e) {
